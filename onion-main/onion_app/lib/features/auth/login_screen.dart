@@ -15,14 +15,15 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _employeeIdController = TextEditingController(text: 'INS1024');
-  final _passwordController = TextEditingController(text: 'procure@2026');
+  final _usernameOrEmailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _employeeIdController.dispose();
+    _usernameOrEmailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -30,30 +31,42 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _errorMessage = null);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
+
     try {
       final success = await auth.login(
-        _employeeIdController.text.trim(),
+        _usernameOrEmailController.text.trim(),
         _passwordController.text,
       );
+
       if (success && mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
         );
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Invalid Employee ID or Password. Offline credentials available.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().contains('Unable to connect')
+              ? 'Unable to connect to server. Please check connection.'
+              : 'Invalid username or password';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final network = Provider.of<NetworkService>(context);
-    final auth = Provider.of<AuthProvider>(context);
 
     return Scaffold(
       backgroundColor: AppTheme.bgSlate,
@@ -68,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Offline Session Status Banner
+                    // Network Connectivity Status Banner
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
@@ -91,9 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            network.isOnline
-                                ? 'Online • Ready to Sync'
-                                : 'Offline session available',
+                            network.isOnline ? 'Online • Server Connected' : 'Offline • Check Connection',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -130,32 +141,30 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Titles
+                    // Title
                     const Text(
-                      'Onion Quality\nAssessment',
+                      'Onion AI',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
                         color: AppTheme.darkSlate,
-                        height: 1.2,
                         letterSpacing: -0.5,
                       ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Procurement Portal',
+                      'Quality Assessment & Procurement System',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
                         color: AppTheme.textMuted,
-                        letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
 
-                    // Error Message
+                    // Error Message Banner
                     if (_errorMessage != null) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -167,12 +176,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.error, color: AppTheme.errorRed, size: 18),
+                            const Icon(Icons.error_outline, color: AppTheme.errorRed, size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _errorMessage!,
-                                style: const TextStyle(fontSize: 12, color: AppTheme.errorRed, fontWeight: FontWeight.w500),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppTheme.errorRed,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -180,133 +193,94 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
 
-                    // Employee ID Field
-                    TextFormField(
-                      controller: _employeeIdController,
-                      decoration: const InputDecoration(
-                        labelText: 'Employee ID',
-                        hintText: 'e.g. INS1024',
-                        prefixIcon: Icon(Icons.badge, color: AppTheme.textMuted, size: 20),
-                      ),
-                      textInputAction: TextInputAction.next,
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter Employee ID' : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Password Field
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock, color: AppTheme.textMuted, size: 20),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                            color: AppTheme.textMuted,
-                            size: 20,
-                          ),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                        ),
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _handleLogin(),
-                      validator: (v) => (v == null || v.length < 4) ? 'Password must be at least 4 characters' : null,
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Login Button
-                    PrimaryButton(
-                      label: 'Login',
-                      isLoading: auth.isLoading,
-                      onPressed: _handleLogin,
-                      height: 50,
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Demo quick buttons
+                    // Input Form Card
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppTheme.borderGray),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // Username / Email Field
                           const Text(
-                            'OFFLINE DEMO INSPECTORS',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textMuted,
-                              letterSpacing: 0.5,
-                            ),
+                            'Username / Email',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.darkSlate),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () {
-                                    _employeeIdController.text = 'INS1024';
-                                    _passwordController.text = 'procure@2026';
-                                    _handleLogin();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primaryTeal.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: AppTheme.primaryTeal.withValues(alpha: 0.2)),
-                                    ),
-                                    child: const Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Arun Kumar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryTeal)),
-                                        Text('INS1024 • Erode APMC', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                                      ],
-                                    ),
-                                  ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _usernameOrEmailController,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              hintText: 'Enter username or email',
+                              prefixIcon: const Icon(Icons.person_outline, size: 20),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Enter username or email';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Password Field
+                          const Text(
+                            'Password',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.darkSlate),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _handleLogin(),
+                            decoration: InputDecoration(
+                              hintText: 'Enter password',
+                              prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                  size: 20,
                                 ),
+                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () {
-                                    _employeeIdController.text = 'INS1025';
-                                    _passwordController.text = 'procure@2026';
-                                    _handleLogin();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.bgSlate,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: AppTheme.borderGray),
-                                    ),
-                                    child: const Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Sunita Patil', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.darkSlate)),
-                                        Text('INS1025 • Lasalgaon', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Login Button
+                          PrimaryButton(
+                            label: 'LOGIN',
+                            icon: Icons.login_rounded,
+                            isLoading: _isLoading,
+                            onPressed: _isLoading ? null : _handleLogin,
+                            height: 50,
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
 
-                    // Offline Notice Footer
+                    // Clean Footer (No Create Account, No Sign Up, No Forgot Password)
                     const Center(
                       child: Text(
-                        'Government APMC Onion Procurement System\nOffline validation active on this device',
+                        'Authorized Personnel Only\nStatic Account Access Controlled',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 11,

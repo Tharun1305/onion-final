@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/api_config.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/network/network_service.dart';
@@ -102,10 +103,16 @@ class SyncQueueService extends ChangeNotifier {
         'grading': inspection.gradingResult?.toMap(),
       };
 
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_session_token');
+
       final url = Uri.parse('$backendBaseUrl/inspections/sync');
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 8));
 

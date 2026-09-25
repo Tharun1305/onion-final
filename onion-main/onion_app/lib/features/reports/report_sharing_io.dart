@@ -20,11 +20,13 @@ Future<ReportShareResult> platformDownloadPdf(Uint8List bytes, String filename) 
   try {
     Directory? targetDir;
     if (Platform.isAndroid) {
-      // Try external storage downloads or app documents
       try {
-        targetDir = Directory('/storage/emulated/0/Download');
-        if (!await targetDir.exists()) {
-          targetDir = await getExternalStorageDirectory();
+        final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+        if (extDirs != null && extDirs.isNotEmpty) {
+          targetDir = extDirs.first;
+        } else {
+          final ext = await getExternalStorageDirectory();
+          targetDir = ext ?? await getApplicationDocumentsDirectory();
         }
       } catch (_) {
         targetDir = await getApplicationDocumentsDirectory();

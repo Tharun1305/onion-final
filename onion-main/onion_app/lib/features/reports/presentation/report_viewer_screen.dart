@@ -33,7 +33,6 @@ class ReportViewerScreen extends StatefulWidget {
 class _ReportViewerScreenState extends State<ReportViewerScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   Uint8List? _pdfBytes;
-  bool _isGenerating = false;
   bool _isExporting = false;
 
   @override
@@ -79,29 +78,6 @@ class _ReportViewerScreenState extends State<ReportViewerScreen> with SingleTick
       }
     }
     return null;
-  }
-
-  Future<void> _generatePdf() async {
-    if (widget.inspection == null) return;
-    setState(() => _isGenerating = true);
-    try {
-      final bytes = await PdfReportGenerator.generatePdfBytes(widget.inspection!);
-      if (!kIsWeb) {
-        await PdfReportGenerator.saveReportLocally(widget.inspection!, bytes);
-      }
-      setState(() {
-        _pdfBytes = bytes;
-        _isGenerating = false;
-      });
-      _tabController.animateTo(1);
-    } catch (e) {
-      setState(() => _isGenerating = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error generating PDF: $e')),
-        );
-      }
-    }
   }
 
   Future<Uint8List?> _ensurePdfBytes() async {
@@ -164,96 +140,7 @@ class _ReportViewerScreenState extends State<ReportViewerScreen> with SingleTick
     }
   }
 
-  void _showExportOptionsSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Export & Share Report',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.darkSlate,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Choose your preferred sharing or export option:',
-                  style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryTeal.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.share_rounded, color: AppTheme.primaryTeal),
-                  ),
-                  title: const Text(
-                    'Share via Apps',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Text(
-                    'WhatsApp, Gmail, Telegram, or System Share Sheet',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _sharePdf();
-                  },
-                ),
-                const Divider(),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0284C7).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.download_rounded, color: Color(0xFF0284C7)),
-                  ),
-                  title: const Text(
-                    'Download PDF',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Text(
-                    'Save official PDF document directly to your device',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _downloadPdf();
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -313,11 +200,6 @@ class _ReportViewerScreenState extends State<ReportViewerScreen> with SingleTick
             tooltip: 'Download PDF',
             icon: const Icon(Icons.download_rounded),
             onPressed: _isExporting ? null : _downloadPdf,
-          ),
-          IconButton(
-            tooltip: 'Share Report',
-            icon: const Icon(Icons.share_rounded),
-            onPressed: _isExporting ? null : _showExportOptionsSheet,
           ),
         ],
         bottom: TabBar(
@@ -610,38 +492,35 @@ class _ReportViewerScreenState extends State<ReportViewerScreen> with SingleTick
                 ),
                 const SizedBox(height: 24),
 
-                // Bottom Buttons: View PDF & Share / Download
+                // Bottom Buttons: Download PDF & Single Share Button
                 Row(
                   children: [
-                    Expanded(
-                      child: PrimaryButton(
-                        label: 'Official PDF',
-                        icon: Icons.picture_as_pdf,
-                        isLoading: _isGenerating,
-                        onPressed: _generatePdf,
-                        height: 50,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
                     Expanded(
                       child: SecondaryButton(
                         label: 'Download PDF',
                         icon: Icons.download_rounded,
+                        isLoading: _isExporting,
                         onPressed: _downloadPdf,
                         height: 50,
                       ),
                     ),
                     const SizedBox(width: 12),
-                    IconButton.filled(
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppTheme.primaryTeal,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(50, 50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryTeal,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.share_rounded, size: 20),
+                        label: const Text(
+                          'Share',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: _isExporting ? null : _sharePdf,
                       ),
-                      tooltip: 'Share Report',
-                      icon: const Icon(Icons.share_rounded),
-                      onPressed: _showExportOptionsSheet,
                     ),
                   ],
                 ),
@@ -660,22 +539,11 @@ class _ReportViewerScreenState extends State<ReportViewerScreen> with SingleTick
             canChangeOrientation: false,
             canChangePageFormat: false,
             canDebug: false,
+            allowPrinting: false,
+            allowSharing: false,
+            actions: const [],
             previewPageMargin: const EdgeInsets.all(12),
             pdfFileName: '${widget.inspectionCode}_report.pdf',
-            actions: [
-              PdfPreviewAction(
-                icon: const Icon(Icons.share_rounded),
-                onPressed: (context, build, pageFormat) async {
-                  await _sharePdf();
-                },
-              ),
-              PdfPreviewAction(
-                icon: const Icon(Icons.download_rounded),
-                onPressed: (context, build, pageFormat) async {
-                  await _downloadPdf();
-                },
-              ),
-            ],
             loadingWidget: const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

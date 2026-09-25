@@ -25,7 +25,13 @@ Future<ReportShareResult> platformDownloadPdf(Uint8List bytes, String filename) 
     html.document.body?.children.add(anchor);
     anchor.click();
     html.document.body?.children.remove(anchor);
-    html.Url.revokeObjectUrl(url);
+    
+    // Allow the browser download pipeline time to initiate before revoking
+    Future.delayed(const Duration(seconds: 10), () {
+      try {
+        html.Url.revokeObjectUrl(url);
+      } catch (_) {}
+    });
 
     return ReportShareResult(
       success: true,

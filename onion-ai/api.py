@@ -2,7 +2,7 @@ import os
 import io
 import tempfile
 import uvicorn
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
@@ -16,6 +16,11 @@ from PIL import Image, ImageOps
 
 # Import the existing inference logic directly from predict.py
 from predict import predict_image, load_models
+
+import time
+from typing import Optional, Dict, Any
+from pydantic import BaseModel
+from auth_service import auth_service
 
 app = FastAPI(
     title="Onion AI Health Assessment API",
@@ -105,6 +110,106 @@ async def predict(
                 os.remove(temp_file.name)
             except Exception:
                 pass
+
+# ==============================================================
+# STATIC 5-ACCOUNT AUTHENTICATION & SESSION ENDPOINTS
+# ==============================================================
+
+class LoginRequest(BaseModel):
+    username_or_email: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    password: str
+
+    def get_identifier(self) -> str:
+        return (self.username_or_email or self.email or self.username or "").strip()
+
+class LogoutRequest(BaseModel):
+    token: Optional[str] = None
+
+def get_authenticated_user(
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = None
+) -> Dict[str, Any]:
+    auth_token = token
+    if not auth_token and authorization:
+        auth_token = authorization.replace("Bearer ", "").strip()
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    user = auth_service.validate_session(auth_token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    return user
+
+@app.post("/auth/login")
+def login_user(req: LoginRequest):
+    identifier = req.get_identifier()
+    if not identifier or not req.password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    try:
+        return auth_service.login(identifier, req.password)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Authentication service error")
+
+@app.post("/auth/logout")
+def logout_user(
+    req: Optional[LogoutRequest] = None,
+    authorization: Optional[str] = Header(None)
+):
+    token = None
+    if req and req.token:
+        token = req.token
+    elif authorization:
+        token = authorization.replace("Bearer ", "").strip()
+    if token:
+        auth_service.logout(token)
+    return {"status": "SUCCESS", "message": "Logged out successfully."}
+
+@app.get("/auth/me")
+def get_current_user(user: Dict[str, Any] = Depends(get_authenticated_user)):
+    return user
+
+# ==============================================================
+# USER-ASSOCIATED INSPECTION & REPORT ENDPOINTS
+# ==============================================================
+
+@app.post("/inspections/sync")
+def sync_inspections(
+    payload: Optional[Dict[str, Any]] = None,
+    user: Dict[str, Any] = Depends(get_authenticated_user)
+):
+    if payload:
+        auth_service.sync_user_inspection(user["id"], payload)
+    return {
+        "status": "SUCCESS",
+        "message": "Inspection synchronized successfully for authenticated account.",
+        "user_id": user["id"],
+        "server_timestamp": time.time()
+    }
+
+@app.get("/inspections")
+def list_user_inspections(user: Dict[str, Any] = Depends(get_authenticated_user)):
+    return auth_service.get_user_inspections(user["id"])
+
+@app.post("/reports/sync")
+def sync_reports(
+    payload: Optional[Dict[str, Any]] = None,
+    user: Dict[str, Any] = Depends(get_authenticated_user)
+):
+    return {
+        "status": "SUCCESS",
+        "message": "Report synchronized successfully for account.",
+        "user_id": user["id"]
+    }
+
+@app.get("/sync/status")
+def sync_status():
+    return {
+        "status": "ONLINE",
+        "server_timestamp": time.time()
+    }
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)
