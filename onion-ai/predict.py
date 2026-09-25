@@ -15,7 +15,7 @@ except ImportError:
 
 # ---- Paths (Resolved relative to this script) ----
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-YOLO_MODEL_PATH = os.path.join(BASE_DIR, "runs", "detect", "results", "yolo26s_onion-4", "weights", "best.pt")
+YOLO_MODEL_PATH = os.path.join(BASE_DIR, "weights", "best.pt")
 EFFNET_MODEL_PATH = os.path.join(BASE_DIR, "models", "efficientnetv2_s_multiclass_best.pth")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
