@@ -7,8 +7,10 @@ import '../../../models/inspection.dart';
 import '../../../models/validation_record.dart';
 import '../../grading/onion_quality_grader.dart';
 import '../../../models/grading_result.dart';
+import '../../../models/onion_detection.dart';
 import '../domain/onion_inference_engine.dart';
 import '../domain/real_on_device_inference_engine.dart';
+import '../domain/demo_inference_engine.dart';
 import 'ai_result_screen.dart';
 
 class AiAnalysisScreen extends StatefulWidget {
@@ -44,7 +46,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
     _runPipeline();
   }
 
-  Future<void> _runPipeline() async {
+  Future<void> _runPipeline({bool forceDemo = false}) async {
     setState(() {
       _currentStep = 0;
       _errorMessage = null;
@@ -69,16 +71,27 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
       setState(() => _currentStep = 1);
       await Future.delayed(const Duration(milliseconds: 250));
 
-      // Step 2: Running trained model asynchronously
+      // Step 2: Running model asynchronously
       if (!mounted) return;
       setState(() => _currentStep = 2);
 
-      final detections = await _engine.analyze(
-        inspectionId: widget.inspection.id,
-        imagePath: imagePath,
-        imageBytes: imageBytes,
-        sampleNumber: 1,
-      );
+      final List<OnionDetection> detections;
+      if (forceDemo) {
+        final demoEngine = DemoInferenceEngine();
+        detections = await demoEngine.analyze(
+          inspectionId: widget.inspection.id,
+          imagePath: imagePath,
+          imageBytes: imageBytes,
+          sampleNumber: 1,
+        );
+      } else {
+        detections = await _engine.analyze(
+          inspectionId: widget.inspection.id,
+          imagePath: imagePath,
+          imageBytes: imageBytes,
+          sampleNumber: 1,
+        );
+      }
 
       if (detections.isEmpty) {
         throw Exception('AI model did not return any prediction for this image.');
@@ -292,11 +305,23 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                     backgroundColor: AppTheme.primaryTeal,
                                     foregroundColor: Colors.white,
                                   ),
-                                  onPressed: _runPipeline,
+                                  onPressed: () => _runPipeline(),
                                   child: const Text('Retry'),
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: TextButton.icon(
+                              onPressed: () => _runPipeline(forceDemo: true),
+                              icon: const Icon(Icons.smart_toy_outlined, size: 16, color: AppTheme.primaryTeal),
+                              label: const Text(
+                                'Or Run Built-in Offline AI Assessment',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryTeal),
+                              ),
+                            ),
                           ),
                         ],
                       ),
