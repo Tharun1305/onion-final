@@ -497,20 +497,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 10),
                 Wrap(
-                  spacing: 6,
+                  spacing: 8,
                   runSpacing: 6,
-                  children: AuthProvider.demoAccounts.take(4).map((acc) {
+                  children: AuthProvider.demoAccounts
+                      .where((acc) => acc['username'] == 'admin' || acc['username'] == 'inspector1')
+                      .map((acc) {
                     final isSelected = _usernameOrEmailController.text == acc['username'];
-                    String badgeLabel = 'Admin';
-                    if (acc['username'] == 'inspector1') badgeLabel = 'Inspector 1';
-                    if (acc['username'] == 'inspector2') badgeLabel = 'Inspector 2';
-                    if (acc['username'] == 'inspector3') badgeLabel = 'Inspector 3';
+                    final badgeLabel = acc['username'] == 'admin' ? '👑 Admin' : '🔍 Inspector 1';
 
                     return InkWell(
                       onTap: () => _fillDemoCredentials(acc),
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: isSelected ? AppTheme.primaryTeal : Colors.white,
                           borderRadius: BorderRadius.circular(6),
