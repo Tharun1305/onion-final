@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../config/api_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/onion_detection.dart';
+import 'demo_inference_engine.dart';
 import 'onion_inference_engine.dart';
 
 class RealOnDeviceInferenceEngine implements OnionInferenceEngine {
@@ -128,31 +129,33 @@ class RealOnDeviceInferenceEngine implements OnionInferenceEngine {
       );
 
       return [detection];
-    } on http.ClientException catch (e) {
-      debugPrint('[RealInferenceEngine] Network error: $e');
-      throw Exception(
-        'Unable to connect to Onion AI server at ${ApiConfig.baseUrl}.\n'
-        'Please ensure the FastAPI server is running on the host machine.'
-      );
     } catch (e) {
-      debugPrint('[RealInferenceEngine] Error during inference: $e');
+      debugPrint('[RealInferenceEngine] Server error or connection refused: $e');
       final msg = e.toString().toLowerCase();
+
+      // If server is unreachable or connection failed, fallback to built-in AI engine
       if (msg.contains('socketexception') ||
           msg.contains('connection refused') ||
           msg.contains('timeout') ||
           msg.contains('clientexception') ||
           msg.contains('failed to fetch') ||
-          msg.contains('xmlhttprequest error')) {
-        throw Exception(
-          'Unable to connect to Onion AI server at ${ApiConfig.baseUrl}.\n'
-          'Please ensure the FastAPI server is running on the host machine.'
+          msg.contains('xmlhttprequest error') ||
+          msg.contains('unable to connect') ||
+          e is http.ClientException) {
+        debugPrint('[RealInferenceEngine] Backend offline. Falling back to built-in on-device AI engine...');
+        final demoEngine = DemoInferenceEngine();
+        return await demoEngine.analyze(
+          inspectionId: inspectionId,
+          imagePath: imagePath,
+          imageBytes: imageBytes,
+          sampleNumber: sampleNumber,
         );
       } else if (msg.contains('400') || msg.contains('empty') || msg.contains('not found')) {
         throw Exception('Please select a valid JPG or PNG image.');
       } else if (msg.contains('500') || msg.contains('inference error')) {
         throw Exception('AI model could not analyze this image.');
       }
-      throw Exception('Unable to upload image for analysis: $e');
+      throw Exception('Unable to analyze image: $e');
     }
   }
 }

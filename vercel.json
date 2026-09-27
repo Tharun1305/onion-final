@@ -1,4 +1,13 @@
 {
-    "buildCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable flutter && flutter/bin/flutter config --enable-web && flutter/bin/flutter build web",
-    "outputDirectory": "build/web"
+  "buildCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable flutter && export PATH=\"$PWD/flutter/bin:$PATH\" && cd onion-main/onion_app && flutter config --enable-web && flutter build web --release --no-tree-shake-icons",
+  "outputDirectory": "onion-main/onion_app/build/web",
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/.*",
+      "dest": "/index.html"
+    }
+  ]
 }

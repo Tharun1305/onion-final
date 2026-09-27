@@ -1,0 +1,13 @@
+{
+  "buildCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable flutter && export PATH=\"$PWD/flutter/bin:$PATH\" && flutter config --enable-web && flutter build web --release --no-tree-shake-icons",
+  "outputDirectory": "build/web",
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/.*",
+      "dest": "/index.html"
+    }
+  ]
+}
