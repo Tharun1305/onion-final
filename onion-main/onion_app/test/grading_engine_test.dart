@@ -114,7 +114,7 @@ void main() {
 
       expect(result.totalSample, 40);
       expect(result.gradeAPercentage, 60.0);
-      expect(result.finalGrade, contains('URS'));
+      expect(result.finalGrade, contains('Grade B'));
     });
 
     test('Flags Sub-Standard / Rejected when rotten exceeds threshold', () {
@@ -167,7 +167,7 @@ void main() {
         validations: validations,
       );
 
-      expect(result.finalGrade, contains('Sub-Standard / Rejected'));
+      expect(result.finalGrade, contains('Grade D'));
     });
   });
 

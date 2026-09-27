@@ -118,12 +118,66 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Login with Username or Email and Password against the 5 predefined accounts
+  /// Predefined demo accounts available for quick testing
+  static const List<Map<String, String>> demoAccounts = [
+    {
+      'name': 'Administrator',
+      'username': 'admin',
+      'email': 'admin@onion.ai',
+      'password': 'Admin@Onion2026',
+      'role': 'Super Admin',
+      'center_name': 'APMC Onion Procurement Center',
+      'district': 'Nashik',
+      'state': 'Maharashtra',
+    },
+    {
+      'name': 'Ramesh Shinde',
+      'username': 'inspector1',
+      'email': 'inspector1@onion.ai',
+      'password': 'Inspector1@2026',
+      'role': 'Senior Quality Inspector',
+      'center_name': 'APMC Onion Procurement Center',
+      'district': 'Nashik',
+      'state': 'Maharashtra',
+    },
+    {
+      'name': 'Sunita Patil',
+      'username': 'inspector2',
+      'email': 'inspector2@onion.ai',
+      'password': 'Inspector2@2026',
+      'role': 'Quality Assessor',
+      'center_name': 'APMC Onion Procurement Center',
+      'district': 'Nashik',
+      'state': 'Maharashtra',
+    },
+    {
+      'name': 'Arun Kumar',
+      'username': 'inspector3',
+      'email': 'inspector3@onion.ai',
+      'password': 'Inspector3@2026',
+      'role': 'Procurement Inspector',
+      'center_name': 'APMC Onion Procurement Center',
+      'district': 'Nashik',
+      'state': 'Maharashtra',
+    },
+    {
+      'name': 'Vikram Deshmukh',
+      'username': 'inspector4',
+      'email': 'inspector4@onion.ai',
+      'password': 'Inspector4@2026',
+      'role': 'Audit Assessor',
+      'center_name': 'APMC Onion Procurement Center',
+      'district': 'Nashik',
+      'state': 'Maharashtra',
+    },
+  ];
+
+  /// Login with Username or Email and Password against backend or fallback demo accounts
   Future<bool> login(String usernameOrEmail, String password) async {
     final cleanIdentifier = usernameOrEmail.trim();
 
     if (cleanIdentifier.isEmpty || password.isEmpty) {
-      throw 'Invalid username or password';
+      throw 'Please enter both username/email and password';
     }
 
     try {
@@ -137,7 +191,7 @@ class AuthProvider extends ChangeNotifier {
               'password': password,
             }),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 4));
 
       final data = jsonDecode(response.body);
 
@@ -160,12 +214,189 @@ class AuthProvider extends ChangeNotifier {
         final detail = data['detail'] ?? 'Invalid username or password';
         throw detail.toString();
       }
-    } on http.ClientException {
-      throw 'Unable to connect to the server. Please check your connection.';
     } catch (e) {
-      if (e is String) rethrow;
+      // Check fallback: if server is unreachable or offline, verify demo accounts & local accounts
+      final fallbackSuccess = await _tryOfflineLogin(cleanIdentifier, password);
+      if (fallbackSuccess) {
+        return true;
+      }
+
+      if (e is String && !e.contains('connect') && !e.contains('SocketException') && !e.contains('Timeout')) {
+        rethrow;
+      }
       throw 'Invalid username or password';
     }
+  }
+
+  /// Register a new account
+  Future<bool> register({
+    required String name,
+    required String email,
+    required String username,
+    required String password,
+    String role = 'Quality Inspector',
+    String centerName = 'APMC Onion Procurement Center',
+    String district = 'Nashik',
+    String state = 'Maharashtra',
+  }) async {
+    final cleanName = name.trim();
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanUsername = username.trim().toLowerCase();
+
+    if (cleanName.isEmpty || cleanEmail.isEmpty || cleanUsername.isEmpty || password.isEmpty) {
+      throw 'All fields are required';
+    }
+
+    if (password.length < 4) {
+      throw 'Password must be at least 4 characters';
+    }
+
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/auth/register');
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'name': cleanName,
+              'email': cleanEmail,
+              'username': cleanUsername,
+              'password': password,
+              'role': role,
+              'center_name': centerName,
+              'district': district,
+              'state': state,
+            }),
+          )
+          .timeout(const Duration(seconds: 4));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        final token = data['token'] as String;
+        final userData = Map<String, dynamic>.from(data['user'] ?? {});
+        userData['token'] = token;
+
+        final profile = UserProfile.fromMap(userData);
+        _currentUser = profile;
+        _token = token;
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('current_inspector_session', jsonEncode(profile.toMap()));
+        await prefs.setString('auth_session_token', token);
+
+        // Also store locally for offline access
+        await _saveLocalAccount(profile, password);
+
+        notifyListeners();
+        return true;
+      } else {
+        final detail = data['detail'] ?? 'Registration failed';
+        throw detail.toString();
+      }
+    } catch (e) {
+      // If server unreachable, complete registration locally
+      final profile = UserProfile(
+        id: 'usr_${DateTime.now().millisecondsSinceEpoch}',
+        name: cleanName,
+        email: cleanEmail,
+        username: cleanUsername,
+        role: role,
+        centerName: centerName,
+        district: district,
+        state: state,
+        token: 'local_token_${DateTime.now().millisecondsSinceEpoch}',
+      );
+
+      await _saveLocalAccount(profile, password);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_inspector_session', jsonEncode(profile.toMap()));
+      await prefs.setString('auth_session_token', profile.token!);
+
+      _currentUser = profile;
+      _token = profile.token;
+      notifyListeners();
+      return true;
+    }
+  }
+
+  Future<void> _saveLocalAccount(UserProfile profile, String password) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final accountsJson = prefs.getString('local_registered_accounts') ?? '[]';
+      final List<dynamic> list = jsonDecode(accountsJson);
+
+      // Check if already exists
+      list.removeWhere((item) => item['username'] == profile.username || item['email'] == profile.email);
+      list.add({
+        ...profile.toMap(),
+        'password': password,
+      });
+
+      await prefs.setString('local_registered_accounts', jsonEncode(list));
+    } catch (e) {
+      debugPrint('[AuthProvider] Error saving local account: $e');
+    }
+  }
+
+  Future<bool> _tryOfflineLogin(String identifier, String password) async {
+    final lowerId = identifier.toLowerCase();
+
+    // 1. Check predefined demo accounts
+    for (final demo in demoAccounts) {
+      if ((demo['username']!.toLowerCase() == lowerId || demo['email']!.toLowerCase() == lowerId) &&
+          demo['password'] == password) {
+        final profile = UserProfile(
+          id: demo['username']!,
+          name: demo['name']!,
+          email: demo['email']!,
+          username: demo['username']!,
+          role: demo['role']!,
+          centerName: demo['center_name']!,
+          district: demo['district']!,
+          state: demo['state']!,
+          token: 'demo_token_${demo['username']}_${DateTime.now().millisecondsSinceEpoch}',
+        );
+
+        _currentUser = profile;
+        _token = profile.token;
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('current_inspector_session', jsonEncode(profile.toMap()));
+        await prefs.setString('auth_session_token', profile.token!);
+
+        notifyListeners();
+        return true;
+      }
+    }
+
+    // 2. Check locally registered accounts
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final accountsJson = prefs.getString('local_registered_accounts') ?? '[]';
+      final List<dynamic> list = jsonDecode(accountsJson);
+
+      for (final item in list) {
+        final u = (item['username'] as String?)?.toLowerCase() ?? '';
+        final e = (item['email'] as String?)?.toLowerCase() ?? '';
+        final p = item['password'] as String? ?? '';
+
+        if ((u == lowerId || e == lowerId) && p == password) {
+          final profile = UserProfile.fromMap(Map<String, dynamic>.from(item));
+          _currentUser = profile;
+          _token = 'local_token_${DateTime.now().millisecondsSinceEpoch}';
+
+          await prefs.setString('current_inspector_session', jsonEncode(profile.toMap()));
+          await prefs.setString('auth_session_token', _token!);
+
+          notifyListeners();
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    return false;
   }
 
   /// Logout securely

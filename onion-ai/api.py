@@ -141,6 +141,34 @@ def get_authenticated_user(
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return user
 
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    username: str
+    password: str
+    role: Optional[str] = "Quality Inspector"
+    center_name: Optional[str] = "APMC Onion Procurement Center"
+    district: Optional[str] = "Nashik"
+    state: Optional[str] = "Maharashtra"
+
+@app.post("/auth/register")
+def register_user(req: RegisterRequest):
+    try:
+        return auth_service.register(
+            name=req.name,
+            email=req.email,
+            username=req.username,
+            password=req.password,
+            role=req.role or "Quality Inspector",
+            center_name=req.center_name or "APMC Onion Procurement Center",
+            district=req.district or "Nashik",
+            state=req.state or "Maharashtra"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Registration error")
+
 @app.post("/auth/login")
 def login_user(req: LoginRequest):
     identifier = req.get_identifier()

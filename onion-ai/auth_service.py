@@ -101,6 +101,21 @@ class AuthService:
                     created_at REAL NOT NULL
                 )
             """)
+            # Custom registered users table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    center_name TEXT,
+                    district TEXT,
+                    state TEXT,
+                    created_at REAL NOT NULL
+                )
+            """)
             conn.commit()
 
     def _load_accounts(self) -> List[Dict[str, Any]]:
@@ -130,21 +145,93 @@ class AuthService:
             })
         return accounts
 
+    def register(
+        self,
+        name: str,
+        email: str,
+        username: str,
+        password: str,
+        role: str = "Quality Inspector",
+        center_name: str = "APMC Onion Procurement Center",
+        district: str = "Nashik",
+        state: str = "Maharashtra"
+    ) -> Dict[str, Any]:
+        """Register a new user account with hashed password."""
+        clean_email = email.strip().lower()
+        clean_username = username.strip().lower()
+        clean_name = name.strip()
+
+        if not clean_email or not clean_username or not password or not clean_name:
+            raise ValueError("All fields are required")
+
+        if len(password) < 4:
+            raise ValueError("Password must be at least 4 characters long")
+
+        # Check against predefined accounts
+        for acc in self.accounts:
+            if acc["email"] == clean_email or acc["username"] == clean_username:
+                raise ValueError("An account with this email or username already exists")
+
+        # Check against database
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM users WHERE email = ? OR username = ?",
+                (clean_email, clean_username)
+            )
+            if cursor.fetchone():
+                raise ValueError("An account with this email or username already exists")
+
+            user_id = f"usr_{secrets.token_hex(6)}"
+            salt = bcrypt.gensalt(12)
+            pwd_hash = bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+            now = time.time()
+
+            cursor.execute("""
+                INSERT INTO users (id, email, username, password_hash, name, role, center_name, district, state, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (user_id, clean_email, clean_username, pwd_hash, clean_name, role, center_name, district, state, now))
+            conn.commit()
+
+        # Log the user in directly and return session
+        return self.login(clean_username, password)
+
     def login(self, username_or_email: str, password: str) -> Dict[str, Any]:
         """
-        Verify credentials against the 5 static accounts.
-        Returns generic error if credentials do not match any account.
+        Verify credentials against predefined demo accounts or registered users.
         """
         clean_input = username_or_email.strip().lower()
         if not clean_input or not password:
             raise ValueError("Invalid username or password")
 
-        # Find matching account among exactly the 5 allowed accounts
+        # 1. Check predefined accounts
         matched_account = None
         for acc in self.accounts:
             if clean_input == acc["email"] or clean_input == acc["username"]:
                 matched_account = acc
                 break
+
+        # 2. If not found in predefined, check registered users in database
+        if not matched_account:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM users WHERE email = ? OR username = ?",
+                    (clean_input, clean_input)
+                )
+                row = cursor.fetchone()
+                if row:
+                    matched_account = {
+                        "id": row["id"],
+                        "email": row["email"],
+                        "username": row["username"],
+                        "password_hash": row["password_hash"],
+                        "name": row["name"],
+                        "role": row["role"],
+                        "center_name": row["center_name"] or "APMC Onion Procurement Center",
+                        "district": row["district"] or "Nashik",
+                        "state": row["state"] or "Maharashtra",
+                    }
 
         if not matched_account:
             # Constant-time dummy check to prevent timing attack enumeration
