@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/network/network_service.dart';
+import '../auth/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
-import '../navigation/main_navigation_screen.dart';
-import 'auth_provider.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -29,38 +29,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) return;
-
+    // Authentication bypassed — any input logs in directly
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    final auth = Provider.of<AuthProvider>(context, listen: false);
+    // Small delay for UX (shows loading spinner briefly)
+    await Future.delayed(const Duration(milliseconds: 600));
 
-    try {
-      final success = await auth.login(
-        _usernameOrEmailController.text.trim(),
-        _passwordController.text,
-      );
-
-      if (success && mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString().contains('Unable to connect')
-              ? 'Unable to connect to server. Please check connection.'
-              : 'Invalid username or password';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+    if (mounted) {
+      // Store the entered name in AuthProvider so it shows across the app
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      await auth.loginDemo(_usernameOrEmailController.text);
+      // Navigation is handled automatically by Consumer<AuthProvider> in main.dart
     }
   }
 
@@ -228,10 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               fillColor: const Color(0xFFF8FAFC),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Enter username or email';
-                              return null;
-                            },
+                            validator: (v) => null, // No validation required
                           ),
                           const SizedBox(height: 16),
 
@@ -260,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               fillColor: const Color(0xFFF8FAFC),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
+                            validator: (v) => null, // No validation required
                           ),
                           const SizedBox(height: 24),
 
@@ -277,15 +256,29 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Clean Footer (No Create Account, No Sign Up, No Forgot Password)
-                    const Center(
-                      child: Text(
-                        'Authorized Personnel Only\nStatic Account Access Controlled',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textMuted,
-                          height: 1.4,
+                    // Demo notice footer
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFA5B4FC)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.info_outline, size: 14, color: Color(0xFF6366F1)),
+                            SizedBox(width: 6),
+                            Text(
+                              'Demo Mode — Enter anything to login',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6366F1),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

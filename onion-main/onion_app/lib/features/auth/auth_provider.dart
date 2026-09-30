@@ -168,6 +168,19 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Demo login — no server call, uses the entered name directly
+  Future<void> loginDemo(String usernameOrEmail) async {
+    final name = usernameOrEmail.trim().isEmpty ? 'Inspector' : usernameOrEmail.trim();
+    _currentUser = UserProfile(
+      id: 'demo-001',
+      name: name,
+      email: name.contains('@') ? name : '$name@onion.ai',
+      username: name.contains('@') ? name.split('@').first : name,
+    );
+    _token = 'demo-token';
+    notifyListeners();
+  }
+
   /// Logout securely
   Future<void> logout() async {
     try {
