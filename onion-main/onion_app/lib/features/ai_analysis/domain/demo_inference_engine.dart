@@ -1,14 +1,13 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/onion_detection.dart';
 import 'onion_inference_engine.dart';
 
 class DemoInferenceEngine implements OnionInferenceEngine {
-  final Random _random = Random(42); // Seeded for realistic consistency
-
   @override
-  String get engineName => 'DemoOnDeviceInferenceEngine (Quantized Mobile Simulation)';
+  String get engineName => 'DemoOnDeviceInferenceEngine (Fallback Simulation)';
 
   @override
   bool get isSimulation => true;
@@ -20,77 +19,108 @@ class DemoInferenceEngine implements OnionInferenceEngine {
     Uint8List? imageBytes,
     int sampleNumber = 1,
   }) async {
-    // Simulate lightweight on-device CPU inference delay
-    await Future.delayed(const Duration(milliseconds: 350));
+    await Future.delayed(const Duration(milliseconds: 300));
 
-    final List<OnionClass> targetClasses = [];
-    for (int i = 0; i < 32; i++) {
-      targetClasses.add(OnionClass.healthy);
-    }
-    for (int i = 0; i < 4; i++) {
-      targetClasses.add(OnionClass.damaged);
-    }
-    for (int i = 0; i < 2; i++) {
-      targetClasses.add(OnionClass.rotten);
-    }
-    for (int i = 0; i < 1; i++) {
-      targetClasses.add(OnionClass.sprouted);
-    }
-    for (int i = 0; i < 3; i++) {
-      targetClasses.add(OnionClass.undersized);
-    }
+    OnionClass primaryClass = OnionClass.healthy;
+    String rawClass = 'healthy';
+    double primaryConfidence = 0.88;
+    Map<String, double> primaryProbs = {
+      'healthy': 88.0,
+      'damaged': 5.0,
+      'sprouted': 3.0,
+      'black_rot': 2.0,
+      'mold': 1.0,
+      'soft_rot': 1.0,
+    };
 
-    targetClasses.shuffle(Random(1024));
+    // Analyze image bytes directly if available
+    if (imageBytes != null && imageBytes.isNotEmpty) {
+      try {
+        final codec = await ui.instantiateImageCodec(
+          imageBytes,
+          targetWidth: 32,
+          targetHeight: 32,
+        );
+        final frame = await codec.getNextFrame();
+        final byteData = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
 
-    final detections = <OnionDetection>[];
-    const cols = 7;
+        if (byteData != null) {
+          int darkRotPixels = 0;
+          int greenSproutPixels = 0;
+          int totalPixels = 32 * 32;
 
-    for (int i = 0; i < targetClasses.length; i++) {
-      final c = targetClasses[i];
-      final col = i % cols;
-      final row = i ~/ cols;
+          for (int i = 0; i < byteData.lengthInBytes; i += 4) {
+            final r = byteData.getUint8(i);
+            final g = byteData.getUint8(i + 1);
+            final b = byteData.getUint8(i + 2);
 
-      final x = 0.05 + (col * 0.13) + (_random.nextDouble() * 0.02);
-      final y = 0.06 + (row * 0.15) + (_random.nextDouble() * 0.02);
-      final w = (c == OnionClass.undersized) ? 0.09 : 0.11;
-      final h = (c == OnionClass.undersized) ? 0.09 : 0.11;
+            // Dark rotting/decay/black rot spots: very low luminance
+            final luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+            if (luminance < 65 && (r < 75 && g < 75 && b < 75)) {
+              darkRotPixels++;
+            }
+            // Green sprouting shoot
+            if (g > 70 && g > r * 1.25 && g > b * 1.25) {
+              greenSproutPixels++;
+            }
+          }
 
-      double confidence;
-      SizeCategory size;
+          final rotRatio = darkRotPixels / totalPixels;
+          final sproutRatio = greenSproutPixels / totalPixels;
 
-      if (c == OnionClass.damaged) {
-        confidence = 0.87;
-        size = SizeCategory.normal;
-      } else if (c == OnionClass.rotten) {
-        confidence = 0.91 + (_random.nextDouble() * 0.05);
-        size = SizeCategory.normal;
-      } else if (c == OnionClass.sprouted) {
-        confidence = 0.89 + (_random.nextDouble() * 0.04);
-        size = SizeCategory.large;
-      } else if (c == OnionClass.undersized) {
-        confidence = 0.94 + (_random.nextDouble() * 0.04);
-        size = SizeCategory.small;
-      } else {
-        confidence = 0.92 + (_random.nextDouble() * 0.06);
-        size = (i % 3 == 0) ? SizeCategory.large : SizeCategory.normal;
+          if (rotRatio >= 0.08) {
+            // Defective onion with rot/decay (Grade D)
+            primaryClass = OnionClass.rotten;
+            rawClass = 'black_rot';
+            primaryConfidence = 0.65 + min(rotRatio * 0.5, 0.25);
+            final rotPercent = double.parse((primaryConfidence * 100).toStringAsFixed(2));
+            final moldPercent = double.parse((12.0 + rotRatio * 10).toStringAsFixed(2));
+            final healthyPercent = double.parse(max(100.0 - rotPercent - moldPercent - 5.0, 5.0).toStringAsFixed(2));
+            primaryProbs = {
+              'black_rot': rotPercent,
+              'mold': moldPercent,
+              'healthy': healthyPercent,
+              'damaged': 3.5,
+              'soft_rot': 1.0,
+              'sprouted': 0.5,
+            };
+          } else if (sproutRatio >= 0.04) {
+            // Sprouted onion (Grade B / C)
+            primaryClass = OnionClass.sprouted;
+            rawClass = 'sprouted';
+            primaryConfidence = 0.82;
+            primaryProbs = {
+              'sprouted': 82.0,
+              'healthy': 10.0,
+              'damaged': 4.0,
+              'black_rot': 2.0,
+              'mold': 1.0,
+              'soft_rot': 1.0,
+            };
+          }
+        }
+      } catch (e) {
+        debugPrint('[DemoInferenceEngine] Image decode warning: $e');
       }
-
-      detections.add(
-        OnionDetection(
-          id: 'det-$inspectionId-${i + 1}',
-          inspectionId: inspectionId,
-          sampleNumber: sampleNumber,
-          bboxX: double.parse(x.clamp(0.02, 0.88).toStringAsFixed(3)),
-          bboxY: double.parse(y.clamp(0.02, 0.88).toStringAsFixed(3)),
-          bboxW: double.parse(w.toStringAsFixed(3)),
-          bboxH: double.parse(h.toStringAsFixed(3)),
-          aiClass: c,
-          aiConfidence: double.parse(confidence.toStringAsFixed(2)),
-          sizeCategory: size,
-          createdAt: DateTime.now(),
-        ),
-      );
     }
+
+    final detections = <OnionDetection>[
+      OnionDetection(
+        id: 'det-$inspectionId-$sampleNumber',
+        inspectionId: inspectionId,
+        sampleNumber: sampleNumber,
+        bboxX: 0.15,
+        bboxY: 0.15,
+        bboxW: 0.70,
+        bboxH: 0.70,
+        aiClass: primaryClass,
+        aiConfidence: primaryConfidence,
+        sizeCategory: SizeCategory.normal,
+        probabilities: primaryProbs,
+        rawClassName: rawClass,
+        createdAt: DateTime.now(),
+      ),
+    ];
 
     return detections;
   }

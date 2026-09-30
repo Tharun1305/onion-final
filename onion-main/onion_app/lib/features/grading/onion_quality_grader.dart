@@ -133,43 +133,51 @@ class OnionQualityGrader {
 
     final totalRotProb = blackRotProb + softRotProb + moldProb;
     final maxSingleRot = [blackRotProb, softRotProb, moldProb].reduce((a, b) => a > b ? a : b);
+    final totalDefectProb = totalRotProb + damagedProb + sproutedProb;
 
-    // Rule 1: Severe defect / Worst Quality (Grade D)
+    // Rule 1: Severe defect / Pathological rot / Worst Quality (Grade D)
     if (normPrediction == 'black_rot' ||
         normPrediction == 'soft_rot' ||
         normPrediction == 'mold' ||
-        totalRotProb >= 50.0 ||
-        (normPrediction == 'damaged' && confidence >= 75.0 && healthyProb < 15.0) ||
-        (healthyProb < 20.0 && totalRotProb >= 35.0)) {
+        normPrediction == 'rotten' ||
+        totalRotProb >= 25.0 ||
+        maxSingleRot >= 20.0 ||
+        (totalDefectProb >= 50.0 && totalRotProb >= 15.0) ||
+        (healthyProb < 35.0 && totalRotProb >= 15.0) ||
+        (normPrediction == 'damaged' && confidence >= 70.0 && healthyProb < 20.0) ||
+        totalDefectProb >= 70.0) {
       return QualityGrade.D;
     }
 
-    // Rule 2: Highest Quality / Healthy (Grade A)
+    // Rule 2: Highest Quality / Sound Healthy Onion (Grade A)
     if (normPrediction == 'healthy' &&
         healthyProb >= 70.0 &&
-        maxSingleRot < 20.0 &&
-        totalRotProb < 25.0) {
+        maxSingleRot < 12.0 &&
+        totalRotProb < 15.0 &&
+        damagedProb < 15.0 &&
+        totalDefectProb < 25.0) {
       return QualityGrade.A;
     }
 
     // Rule 3: Good Quality / Minor Concerns (Grade B)
-    if ((normPrediction == 'healthy' && healthyProb >= 50.0) ||
-        (normPrediction == 'sprouted' && sproutedProb >= 40.0 && totalRotProb < 25.0) ||
-        (healthyProb >= 50.0 && totalRotProb < 30.0)) {
+    if ((normPrediction == 'healthy' && healthyProb >= 50.0 && totalRotProb < 20.0) ||
+        (normPrediction == 'sprouted' && sproutedProb >= 35.0 && totalRotProb < 15.0 && healthyProb >= 25.0) ||
+        (healthyProb >= 50.0 && totalRotProb < 20.0)) {
       return QualityGrade.B;
     }
 
-    // Rule 4: Noticeable Defects / Moderate Quality (Grade C)
+    // Rule 4: Noticeable Defects / Moderate Damage or Sprouting (Grade C)
     if (normPrediction == 'damaged' ||
-        damagedProb >= 40.0 ||
+        damagedProb >= 30.0 ||
         normPrediction == 'sprouted' ||
-        totalRotProb >= 25.0 ||
+        sproutedProb >= 40.0 ||
+        totalDefectProb >= 45.0 ||
         healthyProb < 50.0) {
       return QualityGrade.C;
     }
 
     // Default safe fallback based on top prediction status
-    return normPrediction == 'healthy' ? QualityGrade.B : QualityGrade.C;
+    return normPrediction == 'healthy' ? QualityGrade.B : QualityGrade.D;
   }
 
   static double _getProb(Map<String, double> map, List<String> keys) {
