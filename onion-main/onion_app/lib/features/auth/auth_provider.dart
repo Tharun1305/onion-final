@@ -399,6 +399,30 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
+  /// Demo login — no server call, uses the entered name directly
+  Future<void> loginDemo(String usernameOrEmail) async {
+    final name = usernameOrEmail.trim().isEmpty ? 'Inspector' : usernameOrEmail.trim();
+    final profile = UserProfile(
+      id: 'demo-001',
+      name: name,
+      email: name.contains('@') ? name : '$name@onion.ai',
+      username: name.contains('@') ? name.split('@').first : name,
+      role: 'Quality Inspector',
+      centerName: 'APMC Onion Procurement Center',
+      district: 'Nashik',
+      state: 'Maharashtra',
+      token: 'demo-token',
+    );
+    _currentUser = profile;
+    _token = 'demo-token';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_inspector_session', jsonEncode(profile.toMap()));
+      await prefs.setString('auth_session_token', 'demo-token');
+    } catch (_) {}
+    notifyListeners();
+  }
+
   /// Logout securely
   Future<void> logout() async {
     try {
