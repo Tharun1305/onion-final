@@ -276,9 +276,9 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                           const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 36),
                           const SizedBox(height: 10),
                           const Text(
-                            'Unable to analyze this image',
+                            'Analysis Failed',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 15,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF991B1B),
                             ),
@@ -287,8 +287,40 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                           Text(
                             _errorMessage!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D)),
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D), height: 1.5),
                           ),
+                          if (_errorMessage!.toLowerCase().contains('server') ||
+                              _errorMessage!.toLowerCase().contains('fastapi') ||
+                              _errorMessage!.toLowerCase().contains('connect') ||
+                              _errorMessage!.toLowerCase().contains('running')) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF7ED),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFFDBA74)),
+                              ),
+                              child: const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '🔧 How to fix:',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    '1. Open the onion-ai folder\n'
+                                    '2. Double-click  start_server.bat\n'
+                                    '3. Wait for "Application startup complete"\n'
+                                    '4. Come back and tap Retry',
+                                    style: TextStyle(fontSize: 11, color: Color(0xFF78350F), height: 1.7),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           Row(
                             children: [

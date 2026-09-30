@@ -136,10 +136,14 @@ class RealOnDeviceInferenceEngine implements OnionInferenceEngine {
       // If server is unreachable or connection failed, fallback to built-in AI engine
       if (msg.contains('socketexception') ||
           msg.contains('connection refused') ||
+          msg.contains('failed host lookup') ||
+          msg.contains('network is unreachable') ||
           msg.contains('timeout') ||
           msg.contains('clientexception') ||
           msg.contains('failed to fetch') ||
           msg.contains('xmlhttprequest error') ||
+          msg.contains('cors') ||
+          msg.contains('cross-origin') ||
           msg.contains('unable to connect') ||
           e is http.ClientException) {
         debugPrint('[RealInferenceEngine] Backend offline. Falling back to built-in on-device AI engine...');
@@ -151,11 +155,11 @@ class RealOnDeviceInferenceEngine implements OnionInferenceEngine {
           sampleNumber: sampleNumber,
         );
       } else if (msg.contains('400') || msg.contains('empty') || msg.contains('not found')) {
-        throw Exception('Please select a valid JPG or PNG image.');
+        throw Exception('Please select a valid JPG or PNG image and try again.');
       } else if (msg.contains('500') || msg.contains('inference error')) {
-        throw Exception('AI model could not analyze this image.');
+        throw Exception('AI model could not analyze this image. Check that model weights are installed.');
       }
-      throw Exception('Unable to analyze image: $e');
+      throw Exception('Analysis failed: $e');
     }
   }
 }
