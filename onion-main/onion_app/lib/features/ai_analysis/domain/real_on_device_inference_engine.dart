@@ -131,28 +131,32 @@ class RealOnDeviceInferenceEngine implements OnionInferenceEngine {
     } on http.ClientException catch (e) {
       debugPrint('[RealInferenceEngine] Network error: $e');
       throw Exception(
-        'Unable to connect to Onion AI server at ${ApiConfig.baseUrl}.\n'
-        'Please ensure the FastAPI server is running on the host machine.'
+        'FastAPI server is not running.\n'
+        'Please double-click "start_server.bat" in the onion-ai folder, wait for it to start, then retry.'
       );
     } catch (e) {
       debugPrint('[RealInferenceEngine] Error during inference: $e');
       final msg = e.toString().toLowerCase();
       if (msg.contains('socketexception') ||
           msg.contains('connection refused') ||
+          msg.contains('failed host lookup') ||
+          msg.contains('network is unreachable') ||
           msg.contains('timeout') ||
           msg.contains('clientexception') ||
           msg.contains('failed to fetch') ||
-          msg.contains('xmlhttprequest error')) {
+          msg.contains('xmlhttprequest error') ||
+          msg.contains('cors') ||
+          msg.contains('cross-origin')) {
         throw Exception(
-          'Unable to connect to Onion AI server at ${ApiConfig.baseUrl}.\n'
-          'Please ensure the FastAPI server is running on the host machine.'
+          'FastAPI server is not running.\n'
+          'Please double-click "start_server.bat" in the onion-ai folder, wait for it to start, then retry.'
         );
       } else if (msg.contains('400') || msg.contains('empty') || msg.contains('not found')) {
-        throw Exception('Please select a valid JPG or PNG image.');
+        throw Exception('Please select a valid JPG or PNG image and try again.');
       } else if (msg.contains('500') || msg.contains('inference error')) {
-        throw Exception('AI model could not analyze this image.');
+        throw Exception('AI model could not analyze this image. Check that model weights are installed.');
       }
-      throw Exception('Unable to upload image for analysis: $e');
+      throw Exception('Analysis failed: $e');
     }
   }
 }
