@@ -181,7 +181,6 @@ void main() {
       );
 
       expect(detections.isNotEmpty, true);
-      expect(detections.length >= 1, true);
 
       for (final det in detections) {
         expect(det.inspectionId, 'test-insp-123');
