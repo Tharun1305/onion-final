@@ -6,13 +6,16 @@ from PIL import Image, ImageOps
 from torchvision import transforms
 from ultralytics import YOLO
 
-# Register HEIC/HEIF image support for mobile phone uploads
+# Register HEIC/HEIF image support for mobile phone uploads (optional)
+# If pillow-heif is not installed or has a DLL issue on Windows, silently skip it.
+# JPG and PNG images will still work perfectly without it.
 try:
     # pyrefly: ignore [missing-import]
     import pillow_heif
     pillow_heif.register_heif_opener()
-except ImportError:
-    pass
+    print("[predict.py] HEIC/HEIF support enabled via pillow-heif.")
+except (ImportError, ModuleNotFoundError, OSError, Exception):
+    pass  # HEIC support is optional — not needed for standard JPG/PNG onion images
 
 # ---- Paths (Resolved relative to this script) ----
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,31 +39,51 @@ def load_models():
 
     print(f"[predict.py] Loading models on device: {DEVICE}")
 
-    # Load YOLO
+    # Load YOLO detector
     if os.path.exists(YOLO_MODEL_PATH):
-        _yolo_model = YOLO(YOLO_MODEL_PATH)
-        print(f"[predict.py] Loaded YOLO detector from: {YOLO_MODEL_PATH}")
+        try:
+            _yolo_model = YOLO(YOLO_MODEL_PATH)
+            print(f"[predict.py] Loaded YOLO detector from: {YOLO_MODEL_PATH}")
+        except Exception as e:
+            print(f"[predict.py] Warning: Failed to load YOLO model: {e}")
+            _yolo_model = None
     else:
         print(f"[predict.py] Warning: YOLO weights not found at: {YOLO_MODEL_PATH}")
 
     # Load EfficientNet multiclass checkpoint
-    if os.path.exists(EFFNET_MODEL_PATH):
-        checkpoint = torch.load(EFFNET_MODEL_PATH, map_location=DEVICE)
-        _classes = checkpoint["classes"]
-        _image_size = checkpoint["image_size"]
-
-        model = timm.create_model(
-            "tf_efficientnetv2_s.in21k_ft_in1k",
-            pretrained=False,
-            num_classes=len(_classes)
+    if not os.path.exists(EFFNET_MODEL_PATH):
+        raise FileNotFoundError(
+            f"EfficientNet model checkpoint not found at: {EFFNET_MODEL_PATH}\n"
+            f"Please ensure 'efficientnetv2_s_multiclass_best.pth' is in the 'models/' folder."
         )
-        model.load_state_dict(checkpoint["model_state_dict"])
-        model = model.to(DEVICE)
-        model.eval()
-        _effnet_model = model
-        print(f"[predict.py] Loaded EfficientNet from: {EFFNET_MODEL_PATH} (Classes: {_classes})")
-    else:
-        raise FileNotFoundError(f"EfficientNet model checkpoint not found at: {EFFNET_MODEL_PATH}")
+
+    try:
+        # weights_only=False is required for checkpoints saved with custom Python objects
+        # (torch >= 2.0 introduced this flag; using False restores legacy pickle-based loading)
+        checkpoint = torch.load(EFFNET_MODEL_PATH, map_location=DEVICE, weights_only=False)
+    except TypeError:
+        # Older PyTorch versions do not support weights_only parameter
+        checkpoint = torch.load(EFFNET_MODEL_PATH, map_location=DEVICE)
+
+    if "classes" not in checkpoint or "model_state_dict" not in checkpoint:
+        raise ValueError(
+            "Model checkpoint is missing required keys ('classes', 'model_state_dict'). "
+            "Please retrain or re-export the EfficientNet model."
+        )
+
+    _classes = checkpoint["classes"]
+    _image_size = checkpoint.get("image_size", 384)
+
+    model = timm.create_model(
+        "tf_efficientnetv2_s.in21k_ft_in1k",
+        pretrained=False,
+        num_classes=len(_classes)
+    )
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model = model.to(DEVICE)
+    model.eval()
+    _effnet_model = model
+    print(f"[predict.py] Loaded EfficientNet from: {EFFNET_MODEL_PATH} (Classes: {_classes})")
 
     _transform = transforms.Compose([
         transforms.Resize((_image_size, _image_size)),
